@@ -1,0 +1,163 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Examination Result System</title>
+  <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
+</head>
+<body>
+  <div class="max-w-5xl mx-auto p-4 md:p-6 lg:p-8 mt-10 mb-10 bg-white rounded-xl shadow-md">
+    <h1 class="text-3xl font-bold mb-4">Examination Result System</h1>
+    <form id="result-form" class="mb-4">
+      <div class="mb-4">
+        <label class="block text-gray-700 text-sm font-bold mb-2" for="studentName">Student Name</label>
+        <input id="studentName" type="text" class="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline" required>
+      </div>
+      <div id="subjects-container">
+        <div class="mb-4">
+          <label class="block text-gray-700 text-sm font-bold mb-2" for="subject1">Subject 1</label>
+          <input id="subject1" type="text" class="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline" required>
+          <label class="block text-gray-700 text-sm font-bold mb-2" for="marks1">Marks</label>
+          <input id="marks1" type="number" class="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline" required>
+        </div>
+      </div>
+      <button id="add-subject" type="button" class="bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded focus:outline-none focus:shadow-outline">Add Subject</button>
+      <button id="add-result" type="submit" class="bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded focus:outline-none focus:shadow-outline">Add Result</button>
+    </form>
+    <table id="result-table" class="w-full table-auto">
+      <thead class="bg-gray-100">
+        <tr>
+          <th class="px-4 py-2">Student Name</th>
+          <th class="px-4 py-2">Subjects</th>
+          <th class="px-4 py-2">Actions</th>
+        </tr>
+      </thead>
+      <tbody id="result-tbody">
+      </tbody>
+    </table>
+    <button id="export-marks" type="button" class="bg-green-500 hover:bg-green-700 text-white font-bold py-2 px-4 rounded focus:outline-none focus:shadow-outline">Export Marks</button>
+    <button id="import-marks" type="button" class="bg-orange-500 hover:bg-orange-700 text-white font-bold py-2 px-4 rounded focus:outline-none focus:shadow-outline">Import Marks</button>
+  </div>
+
+  <script>
+    let db;
+    const request = window.indexedDB.open('examinationResults', 1);
+    request.onupgradeneeded = (event) => {
+      db = request.result;
+      db.createObjectStore('results', { keyPath: 'id', autoIncrement: true });
+    };
+    request.onsuccess = (event) => {
+      db = request.result;
+      displayResults();
+    };
+
+    document.getElementById('add-subject').addEventListener('click', () => {
+      const subjectContainer = document.getElementById('subjects-container');
+      const subjectIndex = subjectContainer.children.length + 1;
+      const subjectHtml = `
+        <div class="mb-4">
+          <label class="block text-gray-700 text-sm font-bold mb-2" for="subject${subjectIndex}">Subject ${subjectIndex}</label>
+          <input id="subject${subjectIndex}" type="text" class="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline" required>
+          <label class="block text-gray-700 text-sm font-bold mb-2" for="marks${subjectIndex}">Marks</label>
+          <input id="marks${subjectIndex}" type="number" class="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline" required>
+        </div>
+      `;
+      subjectContainer.insertAdjacentHTML('beforeend', subjectHtml);
+    });
+
+    document.getElementById('result-form').addEventListener('submit', (event) => {
+      event.preventDefault();
+      const studentName = document.getElementById('studentName').value;
+      const subjects = [];
+      const subjectContainer = document.getElementById('subjects-container');
+      for (let i = 1; i <= subjectContainer.children.length; i++) {
+        const subject = document.getElementById(`subject${i}`).value;
+        const marks = document.getElementById(`marks${i}`).value;
+        subjects.push({ studentName, subject, marks });
+      }
+      const transaction = db.transaction('results', 'readwrite');
+      const store = transaction.objectStore('results');
+      subjects.forEach((subject) => {
+        const addRequest = store.add(subject);
+        addRequest.onsuccess = () => {
+          displayResults();
+        };
+      });
+      document.getElementById('result-form').reset();
+    });
+
+    function displayResults() {
+      const transaction = db.transaction('results', 'readonly');
+      const store = transaction.objectStore('results');
+      const getAllRequest = store.getAll();
+      getAllRequest.onsuccess = () => {
+        const resultTbody = document.getElementById('result-tbody');
+        resultTbody.innerHTML = '';
+        const results = getAllRequest.result;
+        results.forEach((result) => {
+          const row = document.createElement('tr');
+          row.innerHTML = `
+            <td class="border px-4 py-2">${result.studentName}</td>
+            <td class="border px-4 py-2">${result.subject} - ${result.marks}</td>
+            <td class="border px-4 py-2">
+              <button class="bg-red-500 hover:bg-red-700 text-white font-bold py-2 px-4 rounded focus:outline-none focus:shadow-outline" onclick="deleteResult(${result.id})">Delete</button>
+            </td>
+          `;
+          resultTbody.appendChild(row);
+        });
+      };
+    }
+
+    function deleteResult(id) {
+      const transaction = db.transaction('results', 'readwrite');
+      const store = transaction.objectStore('results');
+      const deleteRequest = store.delete(id);
+      deleteRequest.onsuccess = () => {
+        displayResults();
+      };
+    }
+
+    document.getElementById('export-marks').addEventListener('click', () => {
+      const transaction = db.transaction('results', 'readonly');
+      const store = transaction.objectStore('results');
+      const getAllRequest = store.getAll();
+      getAllRequest.onsuccess = () => {
+        const results = getAllRequest.result;
+        const csv = results.map((result) => `${result.studentName},${result.subject},${result.marks}`).join('\n');
+        const blob = new Blob([csv], { type: 'text/csv' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = 'marks.csv';
+        a.click();
+      };
+    });
+
+    document.getElementById('import-marks').addEventListener('click', () => {
+      const input = document.createElement('input');
+      input.type = 'file';
+      input.accept = 'text/csv';
+      input.addEventListener('change', (event) => {
+        const file = event.target.files[0];
+        const reader = new FileReader();
+        reader.addEventListener('load', (event) => {
+          const csv = event.target.result;
+          const rows = csv.split('\n');
+          rows.forEach((row) => {
+            const [studentName, subject, marks] = row.split(',');
+            const transaction = db.transaction('results', 'readwrite');
+            const store = transaction.objectStore('results');
+            const addRequest = store.add({ studentName, subject, marks });
+            addRequest.onsuccess = () => {
+              displayResults();
+            };
+          });
+        });
+        reader.readAsText(file);
+      });
+      input.click();
+    });
+  </script>
+</body>
+</html>
